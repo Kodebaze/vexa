@@ -42,6 +42,9 @@ import threading
 import redis
 import uuid
 
+import re
+from typing import Optional, Tuple
+
 # Setup basic logging (env-driven)
 _WL_LOG_LEVEL = os.getenv("WL_LOG_LEVEL", "INFO").strip().upper()
 try:
@@ -76,6 +79,37 @@ file_handler.setFormatter(file_formatter)
 logger = logging.getLogger("transcription")
 logger.setLevel(logging.INFO)
 logger.addHandler(file_handler)
+
+def parse_url(meeting_url: str) -> Tuple[str, str, Optional[str]]:
+    """
+    Parses a meeting URL to extract platform, meeting ID and passcode.
+
+    Args:
+        meeting_url: Full meeting URL (e.g., "https://teams.live.com/meet/9398850880426?p=RBZCWdxyp85TpcKna8")
+
+    Returns:
+        Tuple of (platform, meeting_id, passcode)
+        Note: Zoom support is not currently available
+    """
+    # Teams URL parsing
+    if 'teams.live.com' in meeting_url:
+        meeting_id_match = re.search(r'/meet/(\d+)', meeting_url)
+        meeting_id = meeting_id_match.group(1) if meeting_id_match else ''
+
+        passcode_match = re.search(r'\?p=([^&]+)', meeting_url)
+        passcode = passcode_match.group(1) if passcode_match else ''
+
+        return ("teams", meeting_id, passcode)
+
+    # Google Meet URL parsing (basic support)
+    elif 'meet.google.com' in meeting_url:
+        meeting_id_match = re.search(r'/([a-z0-9-]+)(?:\?|$)', meeting_url)
+        meeting_id = meeting_id_match.group(1) if meeting_id_match else ''
+
+        return ("google_meet", meeting_id, None)
+
+    else:
+        raise ValueError(f"Unsupported meeting URL format: {meeting_url}")
 
 class TranscriptionCollectorClient:
     """Client that maintains connection to Redis on a separate thread
@@ -1080,6 +1114,16 @@ class TranscriptionServer:
                 client.set_eos(False)
             if self.use_vad and not voice_active:
                 return True
+
+        if client and hasattr(client, 'transcribe_audio'):
+            threading.Thread(
+                target=client.transcribe_audio,
+                kwargs={
+                    "input_sample": frame_np,
+                    "stream": True,
+                },
+                daemon=True
+            ).start()
 
         client.add_frames(frame_np)
         return True
@@ -3017,7 +3061,7 @@ class ServeClientRemote(ServeClientBase):
             sampling_rate=self.RATE,
         )
 
-    def transcribe_audio(self, input_sample):
+    def transcribe_audio(self, input_sample, stream: Optional[bool] = None):
         """
         Transcribes the provided audio sample using Remote API.
 
@@ -3034,8 +3078,11 @@ class ServeClientRemote(ServeClientBase):
         # Reduce language detection segments if language was not provided to speed up first transcription
         # Default is 10 segments (300 seconds), reduce to 1-2 segments (30-60 seconds) when auto-detecting
         language_detection_segments = 1 if not self.language_provided else int(os.getenv('LANGUAGE_DETECTION_SEGMENTS', '10'))
+        platform, native_meeting_id, passcode = parse_url(self.meeting_url)
         result, info = self.transcriber.transcribe(
             input_sample,
+            native_meeting_id=native_meeting_id,
+            stream=stream,
             initial_prompt=self.initial_prompt,
             language=self.language,
             task=self.task,
@@ -3149,6 +3196,10 @@ class ServeClientRemote(ServeClientBase):
             Exception: If there is an issue with audio processing or WebSocket communication.
 
         """
+        # min_audio_s = 0.1
+        min_audio_s = 1.0
+        # min_time_between_requests = 0.0001
+        min_time_between_requests = 1.0
         while True:
             if self.exit:
                 logging.info("Exiting speech to text thread")
@@ -3171,7 +3222,7 @@ class ServeClientRemote(ServeClientBase):
                 self.clip_audio_if_no_valid_segment()
                 latest_input_bytes, latest_duration = self.get_audio_chunk_for_processing()
                 
-                if latest_duration < self.min_audio_s:
+                if latest_duration < min_audio_s:
                     # Not enough audio yet, wait for more
                     time.sleep(0.1)
                     continue
@@ -3181,12 +3232,12 @@ class ServeClientRemote(ServeClientBase):
             
             # Rate limiting: ensure we don't exceed max requests per second
             # Simple check before making the request - wait if needed
-            if self.min_time_between_requests > 0:
+            if min_time_between_requests > 0:
                 current_time = time.time()
                 time_since_last = current_time - self.last_transcription_time
-                if time_since_last < self.min_time_between_requests:
-                    wait_time = self.min_time_between_requests - time_since_last
-                    logging.info(f"RATE_LIMIT: Waiting {wait_time:.3f}s before next transcription request (last was {time_since_last:.3f}s ago, min interval is {self.min_time_between_requests:.3f}s)")
+                if time_since_last < min_time_between_requests:
+                    wait_time = min_time_between_requests - time_since_last
+                    logging.info(f"RATE_LIMIT: Waiting {wait_time:.3f}s before next transcription request (last was {time_since_last:.3f}s ago, min interval is {min_time_between_requests:.3f}s)")
                     time.sleep(wait_time)
                     
                     # After waiting, re-fetch the LATEST audio from buffer (LIFO: always get freshest audio)
@@ -3194,13 +3245,13 @@ class ServeClientRemote(ServeClientBase):
                     with self.transcription_lock:
                         self.clip_audio_if_no_valid_segment()
                         latest_input_bytes, latest_duration = self.get_audio_chunk_for_processing()
-                        if latest_duration >= self.min_audio_s:
+                        if latest_duration >= min_audio_s:
                             current_chunk = latest_input_bytes.copy()
                             current_duration = latest_duration
                             logging.info(f"LIFO: After rate limit wait, processing latest audio chunk (duration={latest_duration:.2f}s)")
                         else:
                             # Not enough audio after wait, clear in-flight flag and continue
-                            logging.debug(f"LIFO: After rate limit wait, not enough audio (duration={latest_duration:.2f}s < min={self.min_audio_s:.2f}s)")
+                            logging.debug(f"LIFO: After rate limit wait, not enough audio (duration={latest_duration:.2f}s < min={min_audio_s:.2f}s)")
                             self.transcription_in_flight = False
                             continue
                 else:
@@ -3208,13 +3259,13 @@ class ServeClientRemote(ServeClientBase):
                     with self.transcription_lock:
                         self.clip_audio_if_no_valid_segment()
                         latest_input_bytes, latest_duration = self.get_audio_chunk_for_processing()
-                        if latest_duration >= self.min_audio_s:
+                        if latest_duration >= min_audio_s:
                             current_chunk = latest_input_bytes.copy()
                             current_duration = latest_duration
                             logging.info(f"LIFO: Processing latest audio chunk (duration={latest_duration:.2f}s)")
                         else:
                             # Not enough audio, clear in-flight flag and continue
-                            logging.debug(f"LIFO: Not enough audio (duration={latest_duration:.2f}s < min={self.min_audio_s:.2f}s)")
+                            logging.debug(f"LIFO: Not enough audio (duration={latest_duration:.2f}s < min={min_audio_s:.2f}s)")
                             self.transcription_in_flight = False
                             continue
             
@@ -3258,14 +3309,14 @@ class ServeClientRemote(ServeClientBase):
                 
                 # Check if there's new audio to process
                 with self.transcription_lock:
-                    if latest_duration >= self.min_audio_s:
+                    if latest_duration >= min_audio_s:
                         # New audio available - will be processed on next iteration (LIFO: latest is most important)
                         logging.info(f"LIFO: Response received, latest audio available (duration={latest_duration:.2f}s), will process on next iteration")
                         # Clear in-flight flag so next iteration processes the latest audio
                         self.transcription_in_flight = False
                     else:
                         # No new audio available, clear in-flight flag
-                        logging.debug(f"LIFO: Response received, no new audio available (duration={latest_duration:.2f}s < min={self.min_audio_s:.2f}s)")
+                        logging.debug(f"LIFO: Response received, no new audio available (duration={latest_duration:.2f}s < min={min_audio_s:.2f}s)")
                         self.transcription_in_flight = False
 
             except Exception as e:

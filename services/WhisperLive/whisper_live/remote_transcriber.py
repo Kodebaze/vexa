@@ -248,6 +248,8 @@ class RemoteTranscriber:
     def _call_remote_api(
         self,
         audio_bytes: bytes,
+        native_meeting_id: str,
+        stream: Optional[bool] = None,
         language: Optional[str] = None,
         prompt: Optional[str] = None,
         task: str = "transcribe",
@@ -274,6 +276,8 @@ class RemoteTranscriber:
         data = {
             "model": self.model,
             "temperature": self.temperature,
+            "native_meeting_id": native_meeting_id,
+            "stream": stream,
         }
         
         if self.vad_model:
@@ -514,6 +518,8 @@ class RemoteTranscriber:
     def transcribe(
         self,
         audio: Union[str, BinaryIO, np.ndarray],
+        native_meeting_id: str,
+        stream: Optional[bool] = None,
         language: Optional[str] = None,
         task: str = "transcribe",
         log_progress: bool = False,
@@ -618,6 +624,8 @@ class RemoteTranscriber:
         
         # Call remote API with in-memory audio bytes
         api_response = self._call_remote_api(
+            native_meeting_id=native_meeting_id,
+            stream=stream,
             audio_bytes=audio_wav_bytes,
             language=normalized_language,
             prompt=prompt_str,
