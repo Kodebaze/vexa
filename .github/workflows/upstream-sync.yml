@@ -12,9 +12,12 @@ jobs:
       - uses: actions/checkout@v3
         with:
           ref: main
+          fetch-depth: 0
       - name: Sync upstream
         run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git remote add upstream https://github.com/Vexa-ai/vexa
           git fetch upstream
-          git merge upstream/main --no-edit
+          git merge upstream/main --allow-unrelated-histories --no-edit
           git push origin main
