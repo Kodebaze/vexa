@@ -439,10 +439,12 @@ async def startup_event():
     logger.info("Starting up Bot Manager...")
     # await init_db() # Removed - Admin API should handle this
     # await init_redis() # Removed redis init if not used elsewhere
-    try:
-        get_socket_session()
-    except Exception as e:
-        logger.error(f"Failed to initialize Docker client on startup: {e}", exc_info=True)
+    _orch = os.getenv("ORCHESTRATOR", "docker").lower()
+    if _orch not in ("kubernetes", "process"):
+        try:
+            get_socket_session()
+        except Exception as e:
+            logger.error(f"Failed to initialize Docker client on startup: {e}", exc_info=True)
 
     # --- ADD Redis Client Initialization ---
     try:
@@ -649,7 +651,9 @@ async def request_bot(
             meeting_data['meeting_url'] = req.meeting_url
         if req.teams_base_host:
             meeting_data['teams_base_host'] = req.teams_base_host
-            
+        meeting_data['transcribe_enabled'] = True if req.transcribe_enabled is None else bool(req.transcribe_enabled)
+        meeting_data['recording_enabled'] = bool(req.recording_enabled) if req.recording_enabled is not None else False
+
         new_meeting = Meeting(
             user_id=current_user.id,
             platform=req.platform.value,
