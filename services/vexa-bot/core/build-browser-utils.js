@@ -32,6 +32,7 @@ ${browserUtilsContent}
   window.VexaBrowserUtils = {
     BrowserAudioService: utils.BrowserAudioService,
     BrowserWhisperLiveService: utils.BrowserWhisperLiveService,
+    BrowserPerSpeakerAudioService: utils.BrowserPerSpeakerAudioService,
     generateBrowserUUID: utils.generateBrowserUUID
   };
 
@@ -60,6 +61,7 @@ console.log(`✅ Browser utilities bundle created: ${outputPath}`);
 console.log('📦 Bundle includes:');
 console.log('  - BrowserAudioService');
 console.log('  - BrowserWhisperLiveService');
+console.log('  - BrowserPerSpeakerAudioService');
 console.log('  - generateBrowserUUID');
 console.log('  - window.VexaBrowserUtils');
 console.log('  - window.performLeaveAction');

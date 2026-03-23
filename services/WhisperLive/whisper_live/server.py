@@ -1719,11 +1719,21 @@ class TranscriptionServer:
 
         try:
             payload = control_message.get("payload", {})
-            logging.debug(f"Audio Chunk Metadata received: {payload}")
-            
-            # Future Phase 2: Could be used for audio quality monitoring, chunk timing analysis, etc.
-            # For now, just log at debug level to avoid cluttering logs
-            
+            speaker_name = payload.get("speaker_name")
+            track_id = payload.get("track_id")
+
+            if speaker_name or track_id:
+                with client._speaker_meta_lock:
+                    client._pending_speaker_metadata = {
+                        "speaker_name": speaker_name,
+                        "track_id": track_id,
+                    }
+                logging.debug(
+                    f"Audio chunk metadata stashed: speaker={speaker_name!r}, track={track_id!r}"
+                )
+            else:
+                logging.debug(f"Audio chunk metadata (no speaker fields): {payload}")
+
         except Exception as e:
             logging.error(f"Error processing audio chunk metadata: {e}")
 
@@ -1789,6 +1799,12 @@ class ServeClientBase(object):
         # threading
         self.lock = threading.Lock()
         self._recording_lock = threading.Lock()
+
+        # Per-chunk speaker metadata forwarded from audio_chunk_metadata JSON frames.
+        # Written by the WebSocket recv thread; consumed (once) by the transcription thread.
+        # Protected by _speaker_meta_lock to avoid torn reads/writes across threads.
+        self._pending_speaker_metadata: Optional[dict] = None
+        self._speaker_meta_lock = threading.Lock()
 
         # Durable recording spool (issue #112): write incoming float32 frames
         # to persistent chunk files while keeping in-memory realtime flow intact.
@@ -3376,6 +3392,15 @@ class ServeClientRemote(ServeClientBase):
         # Default is 10 segments (300 seconds), reduce to 1-2 segments (30-60 seconds) when auto-detecting
         language_detection_segments = 1 if not self.language_provided else int(os.getenv('LANGUAGE_DETECTION_SEGMENTS', '10'))
         platform, native_meeting_id, passcode = parse_url(self.meeting_url)
+
+        # Consume pending speaker metadata atomically (consume-once: clear after read so stale
+        # metadata never bleeds into a subsequent chunk that has no speaker info).
+        speaker_meta = None
+        with self._speaker_meta_lock:
+            if self._pending_speaker_metadata is not None:
+                speaker_meta = self._pending_speaker_metadata
+                self._pending_speaker_metadata = None
+
         result, info = self.transcriber.transcribe(
             input_sample,
             native_meeting_id=native_meeting_id,
@@ -3385,7 +3410,10 @@ class ServeClientRemote(ServeClientBase):
             task=self.task,
             vad_filter=self.use_vad,
             vad_parameters=self.vad_parameters if self.use_vad else None,
-            language_detection_segments=language_detection_segments)
+            language_detection_segments=language_detection_segments,
+            speaker_name=speaker_meta["speaker_name"] if speaker_meta else None,
+            track_id=speaker_meta["track_id"] if speaker_meta else None,
+        )
 
         if self.language is None and info is not None:
             self.set_language(info)

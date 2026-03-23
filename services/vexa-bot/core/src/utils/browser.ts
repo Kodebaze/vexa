@@ -508,6 +508,30 @@ export class BrowserWhisperLiveService {
     }
   }
 
+  sendAudioDataWithSpeaker(audioData: Float32Array, speakerName: string, trackId: string): boolean {
+    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+      return false;
+    }
+    try {
+      const meta = {
+        type: "audio_chunk_metadata",
+        payload: {
+          length: audioData.length,
+          sample_rate: 16000,
+          client_timestamp_ms: Date.now(),
+          speaker_name: speakerName,
+          track_id: trackId,
+        },
+      };
+      this.socket.send(JSON.stringify(meta));
+      this.socket.send(audioData);
+      return true;
+    } catch (error: any) {
+      (window as any).logBot(`[WhisperLive] Error sending per-speaker audio: ${error.message}`);
+      return false;
+    }
+  }
+
   sendAudioChunkMetadata(chunkLength: number, sampleRate: number): boolean {
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
       return false;
@@ -620,5 +644,273 @@ export class BrowserWhisperLiveService {
     this.isManualReconnect = true;
     (window as any).logBot(`[STUBBORN] 🛑 Closing for manual reconfigure (will not auto-reconnect)...`);
     this.close();
+  }
+}
+
+// =============================================================================
+// FRAGILE SELECTORS - may need updating if Google Meet's minified CSS changes:
+//   [data-participant-id].oZRSLe            - participant tile container
+//   button[aria-label*="More options for "] - options button whose aria-label carries speaker name
+//   button[aria-label*="Pin "]              - pin button whose aria-label carries speaker name
+//   span.notranslate                        - notranslate span for screen readers that carries speaker name
+//   /Pin (.+?) to your main screen/         - regex to extract name from aria-label
+// These are used only for name resolution; audio capture is independent of them.
+// =============================================================================
+
+export class BrowserPerSpeakerAudioService {
+  private speakerStreams: Map<string, any> = new Map();
+  private onChunkCallback: ((audioData: Float32Array, speakerName: string, trackId: string, sessionStartTime: number | null) => void) | null = null;
+  private config: any;
+  private sessionAudioStartTimeMs: number | null = null;
+  private bodyObserver: MutationObserver | null = null;
+  private pollInterval: any = null;
+
+  constructor(config: any) {
+    this.config = config;
+  }
+
+  private resolveSpeakerNames(trackIds: string[]): string[] {
+    const names: string[] = trackIds.map((_, i) => `Speaker_${i}`);
+    try {
+      const tiles = Array.from(document.querySelectorAll('[data-participant-id].oZRSLe'));
+      if (tiles.length === 0) {
+        (window as any).logBot?.('[PerSpeaker] Tile selector [data-participant-id].oZRSLe matched 0 elements, using Speaker_N names');
+      }
+      tiles.forEach((tile, i) => {
+        if (i >= names.length) return;
+        try {
+          const moreOptionsBtn = tile.querySelector('button[aria-label*="More options for "]');
+          if (moreOptionsBtn) {
+            const label = moreOptionsBtn.getAttribute('aria-label') || '';
+            const match = label.match(/More options for (.+)/);
+            if (match && match[1]) { names[i] = match[1].trim(); return; }
+          }
+          const nameSpan = tile.querySelector('span.notranslate');
+          if (nameSpan && nameSpan.textContent?.trim()) {
+            names[i] = nameSpan.textContent.trim(); return;
+          }
+          const pinBtn = tile.querySelector('button[aria-label*="Pin "]');
+          if (pinBtn) {
+            const label = pinBtn.getAttribute('aria-label') || '';
+            const match = label.match(/Pin (.+?) to your main screen/);
+            if (match && match[1]) { names[i] = match[1].trim(); return; }
+          }
+        } catch {}
+      });
+    } catch (e: any) {
+      (window as any).logBot?.(`[PerSpeaker] Name resolution error: ${e?.message || e} — using Speaker_N fallback`);
+    }
+    (window as any).logBot?.(`[PerSpeaker] Resolved names: ${JSON.stringify(names)}`);
+    return names;
+  }
+
+  async buildSpeakerStreamMap(mediaElements: HTMLMediaElement[]): Promise<number> {
+    const newTrackIds: string[] = [];
+
+    for (let i = 0; i < mediaElements.length; i++) {
+      const el = mediaElements[i] as any;
+      try {
+        const stream: MediaStream = el.srcObject ||
+          (el.captureStream && el.captureStream()) ||
+          (el.mozCaptureStream && el.mozCaptureStream()) || null;
+        if (!(stream instanceof MediaStream)) continue;
+
+        const audioTracks = stream.getAudioTracks();
+        if (audioTracks.length === 0) continue;
+        const track = audioTracks[0];
+        if (track.readyState === 'ended') continue;
+
+        const trackId = track.id || `track_${i}`;
+        if (this.speakerStreams.has(trackId)) continue;
+
+        if (typeof el.muted === 'boolean') el.muted = false;
+        if (typeof el.volume === 'number') el.volume = 1.0;
+        try { el.play().catch(() => {}); } catch {}
+        try { track.enabled = true; } catch {}
+
+        let audioContext: AudioContext;
+        try {
+          audioContext = new AudioContext();
+          await audioContext.resume();
+        } catch (ctxErr: any) {
+          (window as any).logBot?.(`[PerSpeaker] AudioContext blocked for track ${trackId}: ${ctxErr?.message || ctxErr}`);
+          continue;
+        }
+
+        const analyser = audioContext.createAnalyser();
+        analyser.fftSize = 256;
+        analyser.smoothingTimeConstant = 0.3;
+
+        const source = audioContext.createMediaStreamSource(stream);
+        const scriptProcessor = audioContext.createScriptProcessor(
+          this.config.bufferSize || 4096, 1, 1
+        );
+        const gainNode = audioContext.createGain();
+        gainNode.gain.value = 0
+
+        source.connect(analyser);
+        analyser.connect(scriptProcessor);
+        scriptProcessor.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+
+        const entry: any = {
+          el, stream, track, audioContext,
+          source, analyser, scriptProcessor, gainNode,
+          speakerName: `Speaker_${i}`,
+          trackId,
+          isActive: false,
+          activeCount: 0,
+          hangoverTimer: null,
+        };
+        this.speakerStreams.set(trackId, entry);
+        newTrackIds.push(trackId);
+
+        const svc = this;
+        scriptProcessor.onaudioprocess = (event: AudioProcessingEvent) => {
+          if (!entry.isActive) return;
+          if (svc.sessionAudioStartTimeMs === null) {
+            svc.sessionAudioStartTimeMs = Date.now();
+          }
+          const inputData = event.inputBuffer.getChannelData(0);
+          const resampled = svc.resampleAudioData(inputData, audioContext.sampleRate);
+          if (svc.onChunkCallback) {
+            svc.onChunkCallback(resampled, entry.speakerName, entry.trackId, svc.sessionAudioStartTimeMs);
+          }
+        };
+
+        track.onended = () => {
+          (window as any).logBot?.(`[PerSpeaker] Track ended: ${trackId}`);
+          svc.removeStream(trackId);
+        };
+
+        (window as any).logBot?.(`[PerSpeaker] Stream ready: trackId=${trackId} (element ${i + 1}/${mediaElements.length})`);
+      } catch (err: any) {
+        (window as any).logBot?.(`[PerSpeaker] Failed to set up element ${i}: ${err?.message || err}`);
+      }
+    }
+
+    if (newTrackIds.length > 0) {
+      const resolvedNames = this.resolveSpeakerNames(newTrackIds);
+      newTrackIds.forEach((id, i) => {
+        const entry = this.speakerStreams.get(id);
+        if (entry) entry.speakerName = resolvedNames[i];
+      });
+    }
+
+    (window as any).logBot?.(`[PerSpeaker] Stream map: ${this.speakerStreams.size} total streams`);
+    return this.speakerStreams.size;
+  }
+
+  startActivityPolling(onChunk: (audioData: Float32Array, speakerName: string, trackId: string, sessionStartTime: number | null) => void): void {
+    this.onChunkCallback = onChunk;
+
+    this.pollInterval = setInterval(() => {
+      this.speakerStreams.forEach((entry) => {
+        try {
+          const dataArray = new Uint8Array(entry.analyser.frequencyBinCount);
+          entry.analyser.getByteFrequencyData(dataArray);
+          let max = 0;
+          for (let i = 0; i < dataArray.length; i++) {
+            if (dataArray[i] > max) max = dataArray[i];
+          }
+
+          if (max > 8) {
+            entry.activeCount = (entry.activeCount || 0) + 1;
+            if (entry.hangoverTimer) { clearTimeout(entry.hangoverTimer); entry.hangoverTimer = null; }
+            if (entry.activeCount >= 2 && !entry.isActive) {
+              entry.isActive = true;
+              (window as any).logBot?.(`[PerSpeaker] ACTIVE: ${entry.speakerName} (max=${max})`);
+            }
+          } else {
+            entry.activeCount = 0;
+            if (entry.isActive && !entry.hangoverTimer) {
+              entry.hangoverTimer = setTimeout(() => {
+                entry.isActive = false;
+                entry.hangoverTimer = null;
+                (window as any).logBot?.(`[PerSpeaker] SILENT: ${entry.speakerName}`);
+              }, 400);
+            }
+          }
+        } catch {}
+      });
+    }, 150);
+  }
+
+  startBodyObserver(): void {
+    this.bodyObserver = new MutationObserver((mutations) => {
+      let changed = false;
+      for (const m of mutations) {
+        m.addedNodes.forEach((node) => { if ((node as HTMLElement).tagName === 'AUDIO') changed = true; });
+        m.removedNodes.forEach((node) => { if ((node as HTMLElement).tagName === 'AUDIO') changed = true; });
+      }
+      if (changed) {
+        (window as any).logBot?.('[PerSpeaker] Audio element change on body — rescanning');
+        this.handleAudioElementChanges().catch(() => {});
+      }
+    });
+    this.bodyObserver.observe(document.body, { childList: true, subtree: false });
+  }
+
+  private async handleAudioElementChanges(): Promise<void> {
+    const activeEls = (Array.from(document.querySelectorAll('audio')) as HTMLMediaElement[]).filter((el: any) => {
+      if (!el.srcObject || !(el.srcObject instanceof MediaStream)) return false;
+      const tracks = el.srcObject.getAudioTracks();
+      return tracks.length > 0 && tracks.some((t: MediaStreamTrack) => t.enabled && t.readyState !== 'ended');
+    });
+    await this.buildSpeakerStreamMap(activeEls);
+
+    this.speakerStreams.forEach((entry, trackId) => {
+      if (entry.track.readyState === 'ended') this.removeStream(trackId);
+    });
+  }
+
+  private removeStream(trackId: string): void {
+    const entry = this.speakerStreams.get(trackId);
+    if (!entry) return;
+    try {
+      if (entry.hangoverTimer) clearTimeout(entry.hangoverTimer);
+      entry.scriptProcessor.onaudioprocess = null;
+      entry.scriptProcessor.disconnect();
+      entry.analyser.disconnect();
+      entry.source.disconnect();
+      entry.gainNode.disconnect();
+      entry.audioContext.close().catch(() => {});
+    } catch {}
+    this.speakerStreams.delete(trackId);
+    (window as any).logBot?.(`[PerSpeaker] Removed stream: ${trackId}`);
+  }
+
+  getStreamCount(): number { return this.speakerStreams.size; }
+  getSessionAudioStartTime(): number | null { return this.sessionAudioStartTimeMs; }
+  resetSessionStartTime(): void {
+    const old = this.sessionAudioStartTimeMs;
+    this.sessionAudioStartTimeMs = null;
+    (window as any).logBot?.(`[PerSpeaker] Reset session start: ${old} -> null`);
+  }
+
+  /** Alias for callers that use audioService.disconnect() */
+  disconnect(): void { this.stopAll(); }
+
+  stopAll(): void {
+    if (this.pollInterval) { clearInterval(this.pollInterval); this.pollInterval = null; }
+    if (this.bodyObserver) { this.bodyObserver.disconnect(); this.bodyObserver = null; }
+    Array.from(this.speakerStreams.keys()).forEach((id) => this.removeStream(id));
+    this.onChunkCallback = null;
+    (window as any).logBot?.('[PerSpeaker] All streams stopped.');
+  }
+
+  private resampleAudioData(inputData: Float32Array, sourceSampleRate: number): Float32Array {
+    const targetRate = this.config.targetSampleRate || 16000;
+    const targetLen = Math.round(inputData.length * (targetRate / sourceSampleRate));
+    const out = new Float32Array(targetLen);
+    const factor = (inputData.length - 1) / (targetLen - 1);
+    out[0] = inputData[0];
+    out[targetLen - 1] = inputData[inputData.length - 1];
+    for (let i = 1; i < targetLen - 1; i++) {
+      const idx = i * factor;
+      const l = Math.floor(idx), r = Math.ceil(idx);
+      out[i] = inputData[l] + (inputData[r] - inputData[l]) * (idx - l);
+    }
+    return out;
   }
 }

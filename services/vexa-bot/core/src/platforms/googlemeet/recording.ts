@@ -305,6 +305,7 @@ export async function startGoogleRecording(page: Page, botConfig: BotConfig): Pr
           // Wait a bit for media elements to initialize after admission, then start the chain
           (async () => {
             let degradedNoMedia = false;
+            let perSpeakerService: any = null;
             // Wait 2 seconds for media elements to initialize after admission
             (window as any).logBot("Waiting 2 seconds for media elements to initialize after admission...");
             await new Promise(resolve => setTimeout(resolve, 2000));
@@ -321,7 +322,37 @@ export async function startGoogleRecording(page: Page, botConfig: BotConfig): Pr
               return undefined;
             }
 
-            // Create combined audio stream
+            (window as any).logBot("[Google Meet BOT Info] The media elements are " + mediaElements.length)
+            // Per-speaker path (Google Meet: >1 <audio> element)
+            if (mediaElements.length > 1 && browserUtils.BrowserPerSpeakerAudioService) {
+              try {
+                perSpeakerService = new browserUtils.BrowserPerSpeakerAudioService({
+                  targetSampleRate: 16000,
+                  bufferSize: 4096,
+                });
+                const streamCount = await perSpeakerService.buildSpeakerStreamMap(mediaElements);
+                if (streamCount > 0) {
+                  perSpeakerService.startBodyObserver();
+                  // Polling starts now; callback guards on isReady() so it's safe to wire early.
+                  perSpeakerService.startActivityPolling(async (audioData: Float32Array, speakerName: string, trackId: string, _sessionStartTime: number | null) => {
+                    if (!transcriptionEnabled || !whisperLiveService) return;
+                    if (!whisperLiveService.isReady()) return;
+                    whisperLiveService.sendAudioDataWithSpeaker(audioData, speakerName, trackId);
+                  });
+                  (window as any).logBot(`[PerSpeaker] Per-speaker mode active: ${streamCount} streams. Combined stream kept for MediaRecorder only.`);
+                } else {
+                  (window as any).logBot('[PerSpeaker] buildSpeakerStreamMap returned 0, falling back to combined mode.');
+                  perSpeakerService = null;
+                }
+              } catch (psErr: any) {
+                (window as any).logBot(`[PerSpeaker] Setup failed (${psErr?.message || psErr}) — falling back to combined mode.`);
+                try { if (perSpeakerService) perSpeakerService.stopAll(); } catch {}
+                perSpeakerService = null;
+              }
+            }
+
+            // Always create combined stream: used for MediaRecorder, and for transcription
+            // when per-speaker is unavailable (single speaker or fallback).
             return await audioService.createCombinedAudioStream(mediaElements);
           }).then(async (combinedStream: MediaStream | undefined) => {
             if (!combinedStream) {
@@ -375,6 +406,11 @@ export async function startGoogleRecording(page: Page, botConfig: BotConfig): Pr
               // Only send after server ready (canonical Teams pattern)
               if (!whisperLiveService.isReady()) {
                 // Skip sending until server is ready
+                return;
+              }
+              // Per-speaker service is active: it handles sending individual speaker chunks.
+              // Skip the mixed combined-stream send to avoid double-transcription.
+              if (perSpeakerService && perSpeakerService.getStreamCount() > 0) {
                 return;
               }
               // Compute simple RMS and peak for diagnostics
@@ -781,6 +817,7 @@ export async function startGoogleRecording(page: Page, botConfig: BotConfig): Pr
                   );
                 }
                 audioService.disconnect();
+                try { if (typeof perSpeakerService?.stopAll === 'function') perSpeakerService.stopAll(); } catch {}
                 if (whisperLiveService) {
                   whisperLiveService.close();
                 }

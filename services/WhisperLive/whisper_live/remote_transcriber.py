@@ -256,6 +256,8 @@ class RemoteTranscriber:
         language: Optional[str] = None,
         prompt: Optional[str] = None,
         task: str = "transcribe",
+        speaker_name: Optional[str] = None,
+        track_id: Optional[str] = None,
     ) -> dict:
         """
         Call remote HTTP API with retry logic.
@@ -286,6 +288,11 @@ class RemoteTranscriber:
             "native_meeting_id": native_meeting_id,
             "stream": stream,
         }
+
+        if speaker_name is not None:
+            data["speaker_name"] = speaker_name
+        if track_id is not None:
+            data["track_id"] = track_id
         
         if self.vad_model:
             data["vad_model"] = self.vad_model
@@ -529,6 +536,8 @@ class RemoteTranscriber:
         stream: Optional[bool] = None,
         language: Optional[str] = None,
         task: str = "transcribe",
+        speaker_name: Optional[str] = None,
+        track_id: Optional[str] = None,
         log_progress: bool = False,
         beam_size: int = 1,
         best_of: int = 5,
@@ -637,6 +646,8 @@ class RemoteTranscriber:
             language=normalized_language,
             prompt=prompt_str,
             task=task,
+            speaker_name=speaker_name,
+            track_id=track_id,
         )
         
         # Convert to segments

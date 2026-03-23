@@ -2,6 +2,7 @@ export { log, randomDelay, callStartupCallback, callJoiningCallback, callAwaitin
 export { WebSocketManager, type WebSocketConfig, type WebSocketEventHandlers } from './websocket';
 export { 
   BrowserAudioService, 
-  BrowserWhisperLiveService, 
+  BrowserWhisperLiveService,
+  BrowserPerSpeakerAudioService,
   generateBrowserUUID 
 } from './browser';
