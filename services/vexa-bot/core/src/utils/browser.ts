@@ -758,16 +758,12 @@ export class BrowserPerSpeakerAudioService {
           source, analyser, scriptProcessor, gainNode,
           speakerName: `Speaker_${i}`,
           trackId,
-          isActive: false,
-          activeCount: 0,
-          hangoverTimer: null,
         };
         this.speakerStreams.set(trackId, entry);
         newTrackIds.push(trackId);
 
         const svc = this;
         scriptProcessor.onaudioprocess = (event: AudioProcessingEvent) => {
-          if (!entry.isActive) return;
           if (svc.sessionAudioStartTimeMs === null) {
             svc.sessionAudioStartTimeMs = Date.now();
           }
@@ -803,37 +799,6 @@ export class BrowserPerSpeakerAudioService {
 
   startActivityPolling(onChunk: (audioData: Float32Array, speakerName: string, trackId: string, sessionStartTime: number | null) => void): void {
     this.onChunkCallback = onChunk;
-
-    this.pollInterval = setInterval(() => {
-      this.speakerStreams.forEach((entry) => {
-        try {
-          const dataArray = new Uint8Array(entry.analyser.frequencyBinCount);
-          entry.analyser.getByteFrequencyData(dataArray);
-          let max = 0;
-          for (let i = 0; i < dataArray.length; i++) {
-            if (dataArray[i] > max) max = dataArray[i];
-          }
-
-          if (max > 8) {
-            entry.activeCount = (entry.activeCount || 0) + 1;
-            if (entry.hangoverTimer) { clearTimeout(entry.hangoverTimer); entry.hangoverTimer = null; }
-            if (entry.activeCount >= 2 && !entry.isActive) {
-              entry.isActive = true;
-              (window as any).logBot?.(`[PerSpeaker] ACTIVE: ${entry.speakerName} (max=${max})`);
-            }
-          } else {
-            entry.activeCount = 0;
-            if (entry.isActive && !entry.hangoverTimer) {
-              entry.hangoverTimer = setTimeout(() => {
-                entry.isActive = false;
-                entry.hangoverTimer = null;
-                (window as any).logBot?.(`[PerSpeaker] SILENT: ${entry.speakerName}`);
-              }, 400);
-            }
-          }
-        } catch {}
-      });
-    }, 150);
   }
 
   startBodyObserver(): void {
@@ -868,7 +833,6 @@ export class BrowserPerSpeakerAudioService {
     const entry = this.speakerStreams.get(trackId);
     if (!entry) return;
     try {
-      if (entry.hangoverTimer) clearTimeout(entry.hangoverTimer);
       entry.scriptProcessor.onaudioprocess = null;
       entry.scriptProcessor.disconnect();
       entry.analyser.disconnect();
