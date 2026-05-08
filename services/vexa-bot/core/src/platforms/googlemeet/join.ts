@@ -136,10 +136,18 @@ export async function joinGoogleMeeting(
       log("Camera already off or not found.");
     }
 
-    const joinSelector = googleJoinButtonSelectors[0];
-    await page.waitForSelector(joinSelector, { timeout: 60000 });
-    await page.click(joinSelector);
-    log(`${botName} joined the Google Meet Meeting.`);
+    const joinButtonEl = await Promise.race(
+      googleJoinButtonSelectors.map(selector =>
+        page.waitForSelector(selector, { timeout: 30000 }).then(el => ({ el, selector }))
+      )
+    ).catch(() => null);
+
+    if (!joinButtonEl) {
+      throw new Error("join_meeting_error: No join button found");
+    }
+
+    await joinButtonEl.el!.click();
+    log(`${botName} joined the Google Meet Meeting (via selector: "${joinButtonEl.selector}").`);
 
     await page.screenshot({ path: '/app/storage/screenshots/bot-checkpoint-0-after-ask-to-join.png', fullPage: true });
     log("📸 Screenshot taken: After clicking 'Ask to join'");

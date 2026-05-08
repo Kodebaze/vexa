@@ -35,7 +35,8 @@ const baseBrowserArgs = [
   "--ignore-certificate-errors",
   "--ignore-ssl-errors",
   "--ignore-certificate-errors-spki-list",
-  "--disable-site-isolation-trials"
+  "--disable-site-isolation-trials",
+  "--disable-blink-features=AutomationControlled"
 ];
 
 /**

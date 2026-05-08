@@ -1301,11 +1301,11 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
     const isGoogleMeet = botConfig.platform === 'google_meet';
     speakerManager = new SpeakerStreamManager({
       sampleRate: 16000,
-      minAudioDuration: 3,     // 3s of unconfirmed audio before submission
-      submitInterval: 2,       // submit every 2s — lower latency
-      confirmThreshold: 2,     // 2 consecutive matches — faster confirmation
-      maxBufferDuration: 30,   // force-flush at 30s — matches Whisper training window
-      idleTimeoutSec: 15,      // 15s idle → emit + reset
+      minAudioDuration: 0,     // send immediately — no minimum buffer
+      submitInterval: 0,       // no delay between submissions
+      confirmThreshold: 1,     // publish on first result — no Whisper-style re-confirmation needed
+      maxBufferDuration: 30,
+      idleTimeoutSec: 15,
     });
     // VAD gating moved to handlePerSpeakerAudioData entry (per-speaker streaming).
     // SpeakerStreamManager no longer does VAD — it only receives real speech.
@@ -1348,10 +1348,23 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
       const singleAllowed = !explicitLang && allowedLanguages?.length === 1 ? allowedLanguages[0] : null;
       const lang = explicitLang || singleAllowed || null;
 
+      // Capture submitted duration before async call — used as authoritative segEndSec
+      // so the buffer always advances by exactly what was sent, regardless of what the
+      // server returns for segment end timestamps (e.g. remote STT may return end=0).
+      const submittedDurationSec = audioBuffer.length / 16000;
+
       const whisperStartMs = Date.now();
       try {
         const contextPrompt = speakerManager!.getLastConfirmedText(speakerId);
-        const result = await transcriptionClient.transcribe(audioBuffer, lang || undefined, contextPrompt || undefined);
+        const result = await transcriptionClient.transcribe(
+          audioBuffer,
+          lang || undefined,
+          contextPrompt || undefined,
+          botConfig.nativeMeetingId,
+          speakerName,
+          speakerId,
+          true,
+        );
         telemetry.whisperCalls++;
         telemetry.totalWhisperMs += Date.now() - whisperStartMs;
         if (result && result.text) {
@@ -1367,7 +1380,7 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
           if (!lang && prob > 0 && prob < 0.3) {
             telemetry.segmentsDiscarded++;
             log(`[🚫 LOW CONFIDENCE] ${speakerName} | lang_prob=${prob.toFixed(2)} | "${result.text}" — discarded`);
-            speakerManager!.handleTranscriptionResult(speakerId, '');
+            speakerManager!.handleTranscriptionResult(speakerId, '', submittedDurationSec);
             return;
           }
 
@@ -1383,7 +1396,7 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
             if (noSpeech > 0.5 && logProb < -0.7) {
               telemetry.segmentsDiscarded++;
               log(`[🚫 NO SPEECH] ${speakerName} | no_speech=${noSpeech.toFixed(2)} logprob=${logProb.toFixed(2)} | "${result.text}" — discarded`);
-              speakerManager!.handleTranscriptionResult(speakerId, '');
+              speakerManager!.handleTranscriptionResult(speakerId, '', submittedDurationSec);
               return;
             }
 
@@ -1391,7 +1404,7 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
             if (logProb < -0.8 && duration < 2.0) {
               telemetry.segmentsDiscarded++;
               log(`[🚫 LOW QUALITY] ${speakerName} | logprob=${logProb.toFixed(2)} dur=${duration.toFixed(1)}s | "${result.text}" — discarded`);
-              speakerManager!.handleTranscriptionResult(speakerId, '');
+              speakerManager!.handleTranscriptionResult(speakerId, '', submittedDurationSec);
               return;
             }
 
@@ -1399,7 +1412,7 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
             if (compression > 2.4) {
               telemetry.segmentsDiscarded++;
               log(`[🚫 REPETITIVE] ${speakerName} | compression=${compression.toFixed(1)} | "${result.text}" — discarded`);
-              speakerManager!.handleTranscriptionResult(speakerId, '');
+              speakerManager!.handleTranscriptionResult(speakerId, '', submittedDurationSec);
               return;
             }
           }
@@ -1407,7 +1420,7 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
           // 3. Phrase-based hallucination filter
           if (isHallucination(result.text)) {
             log(`[🚫 HALLUCINATION] ${speakerName} | "${result.text}"`);
-            speakerManager!.handleTranscriptionResult(speakerId, '');
+            speakerManager!.handleTranscriptionResult(speakerId, '', submittedDurationSec);
             return;
           }
 
@@ -1422,13 +1435,13 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
             latestWhisperWords = words;
           }
 
-          // Process through SpeakerStreamManager — may trigger onSegmentConfirmed
-          const lastSeg = result.segments?.[result.segments.length - 1];
-          const segEndSec = lastSeg?.end;
+          // Process through SpeakerStreamManager — may trigger onSegmentConfirmed.
+          // Use submittedDurationSec (actual bytes sent) not server segment end, which
+          // may be 0 from non-Whisper backends (e.g. Google Cloud STT relay).
           const whisperSegs = result.segments?.map(s => ({
             text: s.text, start: s.start, end: s.end
           }));
-          speakerManager!.handleTranscriptionResult(speakerId, result.text, segEndSec, whisperSegs);
+          speakerManager!.handleTranscriptionResult(speakerId, result.text, submittedDurationSec, whisperSegs);
 
           // Publish batch: confirmed (collected by onSegmentConfirmed) + pending (current draft)
           if (segmentPublisher && result.text) {
@@ -1469,14 +1482,14 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
             await segmentPublisher.publishTranscript(speakerName, speakerConfirmed, pending);
           }
         } else {
-          speakerManager!.handleTranscriptionResult(speakerId, '');
+          speakerManager!.handleTranscriptionResult(speakerId, '', submittedDurationSec);
         }
       } catch (err: any) {
         telemetry.whisperCalls++;
         telemetry.whisperFailures++;
         telemetry.totalWhisperMs += Date.now() - whisperStartMs;
         log(`[❌ FAILED] ${speakerName}: ${err.message}`);
-        speakerManager!.handleTranscriptionResult(speakerId, '');
+        speakerManager!.handleTranscriptionResult(speakerId, '', submittedDurationSec);
       }
     };
 

@@ -170,6 +170,11 @@ export class SpeakerStreamManager {
     if (!transcript || transcript.trim().length === 0) {
       if (buffer.idleSubmitted) {
         this.fullReset(buffer);
+      } else if (segmentEndSec !== undefined) {
+        // Advance past submitted audio even on empty/discarded result so the
+        // same audio is never re-sent (critical for non-Whisper backends that
+        // return empty or placeholder text rather than actual transcription).
+        this.advanceOffset(buffer, segmentEndSec);
       }
       return;
     }

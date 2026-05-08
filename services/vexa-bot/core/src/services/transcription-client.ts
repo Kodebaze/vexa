@@ -76,12 +76,20 @@ export class TranscriptionClient {
    * Converts to WAV, POSTs to transcription-service, returns parsed result.
    * Retries on transient failures (503, network errors).
    */
-  async transcribe(audioData: Float32Array, language?: string, prompt?: string): Promise<TranscriptionResult> {
+  async transcribe(
+    audioData: Float32Array,
+    language?: string,
+    prompt?: string,
+    nativeMeetingId?: string,
+    speakerName?: string,
+    trackId?: string,
+    stream?: boolean,
+  ): Promise<TranscriptionResult> {
     const wavBuffer = this.float32ToWav(audioData);
 
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
       try {
-        const result = await this.sendRequest(wavBuffer, language, prompt);
+        const result = await this.sendRequest(wavBuffer, language, prompt, nativeMeetingId, speakerName, trackId, stream);
         return result;
       } catch (err: any) {
         const isTransient = err.statusCode === 503 || err.statusCode === 429 || err.statusCode === 500 || !err.statusCode;
@@ -107,7 +115,15 @@ export class TranscriptionClient {
   /**
    * Send the WAV buffer to the transcription-service as multipart form data.
    */
-  private async sendRequest(wavBuffer: Buffer, language?: string, prompt?: string): Promise<TranscriptionResult> {
+  private async sendRequest(
+    wavBuffer: Buffer,
+    language?: string,
+    prompt?: string,
+    nativeMeetingId?: string,
+    speakerName?: string,
+    trackId?: string,
+    stream?: boolean,
+  ): Promise<TranscriptionResult> {
     // Build multipart form data manually (no external dependency needed)
     const boundary = `----FormBoundary${Date.now().toString(36)}`;
 
@@ -176,6 +192,36 @@ export class TranscriptionClient {
         `--${boundary}\r\n` +
         `Content-Disposition: form-data; name="prompt"\r\n\r\n` +
         `${prompt}\r\n`
+      ));
+    }
+
+    // Per-speaker metadata
+    if (nativeMeetingId !== undefined) {
+      parts.push(Buffer.from(
+        `--${boundary}\r\n` +
+        `Content-Disposition: form-data; name="native_meeting_id"\r\n\r\n` +
+        `${nativeMeetingId}\r\n`
+      ));
+    }
+    if (stream !== undefined) {
+      parts.push(Buffer.from(
+        `--${boundary}\r\n` +
+        `Content-Disposition: form-data; name="stream"\r\n\r\n` +
+        `${stream}\r\n`
+      ));
+    }
+    if (speakerName !== undefined) {
+      parts.push(Buffer.from(
+        `--${boundary}\r\n` +
+        `Content-Disposition: form-data; name="speaker_name"\r\n\r\n` +
+        `${speakerName}\r\n`
+      ));
+    }
+    if (trackId !== undefined) {
+      parts.push(Buffer.from(
+        `--${boundary}\r\n` +
+        `Content-Disposition: form-data; name="track_id"\r\n\r\n` +
+        `${trackId}\r\n`
       ));
     }
 
