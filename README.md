@@ -5,11 +5,11 @@
 <h1 align="center" style="margin-top: 0.25em; margin-bottom: 0.5em; font-size: 2.5em; font-weight: 700; letter-spacing: -0.02em;">Vexa</h1>
 
 <p align="center" style="font-size: 1.75em; margin-top: 0.5em; margin-bottom: 0.75em; font-weight: 700; line-height: 1.3; letter-spacing: -0.01em;">
-  <strong>Self-hosted meeting intelligence platform</strong>
+  <strong>Open-source meeting bot API & transcription API</strong>
 </p>
 
 <p align="center" style="font-size: 1em; color: #a0a0a0; margin-top: 0.5em; margin-bottom: 1.5em; letter-spacing: 0.01em;">
-  bots • real-time transcription • storage • API • user interface
+  meeting bots • real-time transcription • interactive bots • MCP server • self-hosted
 </p>
 
 <p align="center" style="margin: 1.5em 0; font-size: 1em;">
@@ -29,9 +29,9 @@
 </p>
 
 <p align="center">
-  <a href="#whats-new">What’s new</a> •
+  <a href="#whats-new">What's new</a> •
   <a href="#quickstart">Quickstart</a> •
-  <a href="#2-get-transcripts">API</a> •
+  <a href="#meeting-api--send-bots-get-transcripts">API</a> •
   <a href="https://docs.vexa.ai">Docs</a> •
   <a href="#roadmap">Roadmap</a> •
   <a href="https://discord.gg/Ga9duGkVz9">Discord</a>
@@ -39,234 +39,188 @@
 
 ---
 
-## What is Vexa?
-
-**Vexa** is an open-source, self-hostable API for real-time meeting transcription. It automatically joins Google Meet, Microsoft Teams, and Zoom meetings, captures audio, and provides real-time transcriptions via REST API and WebSocket.
-
-### At a glance
-
-| Capability | What it means |
-|---|---|
-| **Meeting bots** | Automatically joins Google Meet, Microsoft Teams, and Zoom meetings |
-| **Real-time transcription** | Sub-second transcript delivery during the call |
-| **Interactive bots** | Make bots speak, send/read chat, share screen content, and set avatar in live meetings |
-| **Multilingual** | 100+ languages via Whisper (transcription + translation) |
-| **API-first** | REST API + WebSocket streaming for integrations |
-| **MCP-ready** | Connect AI agents (Claude/Cursor/etc.) through the MCP server |
-| **Storage** | Persist transcripts + meeting metadata in your database |
-| **Multi-user** | Team-ready: users, API keys/tokens, admin operations |
-| **Self-hostable** | Run on your infra for complete data sovereignty |
-| **User interfaces** | Open-source frontends (currently: **[Vexa Dashboard](https://github.com/Vexa-ai/Vexa-Dashboard)**) |
-
-### Who it's for
-
-| You are... | You want... |
-|---|---|
-| **Enterprises** | Self-hosted transcription with strict privacy requirements |
-| **Small & medium teams** | Simple deployment (Vexa Lite) with an open-source UI |
-| **Developers** | Build meeting products (assistants, automations, analytics) on top of the API |
-| **Automation builders** | Integrate with tools like n8n via webhooks / APIs |
+**Vexa** is an open-source, self-hostable meeting bot API and meeting transcription API for Google Meet, Microsoft Teams, and Zoom. Alternative to Recall.ai, Otter.ai, and Fireflies.ai — self-host so meeting data never leaves your infrastructure, or use [vexa.ai](https://vexa.ai) hosted.
 
 ---
 
-## Build on Top. In Hours, Not Months
+**Data sovereignty** — self-host so meeting data never leaves your infrastructure
 
-**Build powerful meeting assistants (like Otter.ai, Fireflies.ai, Fathom) for your startup, internal use, or custom integrations.**
+**Cost** — replace $20/seat SaaS with your own infrastructure
 
-The Vexa API provides powerful abstractions and a clear separation of concerns, enabling you to build sophisticated applications on top with a safe and enjoyable coding experience.
+**Embed in your product** — multi-tenant meeting bot API with scoped tokens
 
-## 🛡️ Built for Data Sovereignty
-
-Vexa is open-source and self-hostable — ideal for regulated industries and teams that cannot compromise on privacy. 
-
-Modular architecture scales from edge devices to millions of users. You choose what to self-host and what to use as a service.
-
-**You control everything:**
-
-**1. Full self-hosting**  
-Run Vexa, database, and transcription service entirely on your infrastructure  
-*<small style="color: #999;">For regulated industries like fintech, medical, etc.</small>*
-
-<hr style="margin: 1.25em 0; border: none; border-top: 1px solid #333;">
-
-**2. GPU-free self-hosting**  
-Self-host Vexa, but plug into external transcription service  
-*<small style="color: #999;">Perfect privacy with minimal DevOps</small>*
-
-<hr style="margin: 1.25em 0; border: none; border-top: 1px solid #333;">
-
-**3. Fully hosted service**  
-At [vexa.ai](https://vexa.ai) — just grab API key  
-*<small style="color: #999;">Ready to integrate</small>*
-
-
-<a id="whats-new"></a>
-
-## 🎉 What's new in v0.9 (pre-release)
-
-- **Zoom:** initial Zoom Meeting SDK support (requires Zoom app setup/approval; see docs)
-- **Recordings:** persist recording artifacts to S3-compatible storage (or local)
-- **Post-meeting playback:** stream recordings via `/recordings/.../raw` with `Range` seeking (`206`) + `Content-Disposition: inline`
-- **Delete semantics:** deleting a meeting also purges recording objects/artifacts (best-effort) before anonymizing the meeting
-- **Interactive Bots API:** live controls for speak/chat/screen/avatar during active meetings
-- **MCP integration docs:** end-to-end guide for connecting AI agents to Vexa tools
+**AI agents** — MCP server with 17 tools
 
 ---
 
-> See full release notes: https://github.com/Vexa-ai/vexa/releases
+### Capabilities
+
+
+| | |
+| --- | --- |
+| **Meeting bot API** | Send a bot to any meeting: auto-join, record, speak, chat, share screen. Open-source alternative to [Recall.ai](https://recall.ai). |
+| **Meeting transcription API** | Real-time transcripts via REST API and WebSocket. Self-hosted alternative to Otter.ai and Fireflies.ai. |
+| **Real-time transcription** | Sub-second per-speaker transcripts during the call. 100+ languages via Whisper. WebSocket streaming. |
+| **Interactive bots** | Make bots speak, send/read chat, share screen content, and set avatar in live meetings. |
+| **Browser bots** | CDP + Playwright browser automation with persistent authenticated sessions via S3. |
+| **MCP server** | 17 meeting tools for Claude, Cursor, Windsurf. AI agents join calls, read transcripts, speak in meetings. |
+| **Multi-tenant** | Users, scoped API tokens, isolated containers. Deploy once, serve your team. |
+| **Dashboard** | Open-source Next.js web UI — meetings, transcripts, agent chat, browser sessions. Ready to use out of the box. |
+| **Self-hostable** | Run on your infra. Meeting data never leaves your infrastructure. |
+
+
+Every feature is a separate service. Pick what you need, skip what you don't. Self-host everything or use [vexa.ai](https://vexa.ai) hosted.
+
+---
+
+## Why Self-Host Meeting Transcription?
+
+**For regulated industries** — banks, financial services, healthcare — meeting data can't leave your infrastructure. Self-hosting Vexa means zero external data transmission and full audit trail on your own infrastructure.
+
+**For cost-conscious teams** — replace per-seat SaaS pricing. A team paying $17/seat/mo for meeting transcription can self-host Vexa and drop that to infrastructure cost.
+
+**For developers** — embed a meeting bot API in your product. Multi-tenant, scoped API tokens, no per-user infrastructure.
+
+Build meeting assistants like Otter.ai, Fireflies.ai, or Fathom — or build a meeting bot API like [Recall.ai](https://recall.ai) — self-hosted on your infrastructure.
+
+- **Vexa (self-host)** — your infra cost. Data never leaves your infrastructure. Meeting bot API, real-time transcription, interactive bots, MCP server. Open source, Apache 2.0. Google Meet, Teams, Zoom.
+- **Recall.ai** — $0.50/hr. No self-hosting. Meeting bot API, real-time transcription. No MCP, limited interactive bots. Closed source. Meet, Teams, Zoom, Webex.
+- **Otter.ai** — $17-20/seat/mo. No self-hosting. No API. Limited real-time transcription. Closed source. Meet, Teams, Zoom.
+
+Or use [vexa.ai](https://vexa.ai) hosted — get an API key and start sending bots immediately, no infrastructure needed.
+
+## Built for Data Sovereignty
+
+Meeting data never leaves your infrastructure. Self-host for complete control. Modular architecture scales from edge devices to millions of users.
+
+**1. Hosted service**
+At [vexa.ai](https://vexa.ai) — get an API key and start sending bots. No infrastructure needed.
+*Ready to integrate*
+
+---
+
+**2. Self-host with Vexa transcription**
+Run Vexa yourself, use vexa.ai for transcription — ready to go, no GPU needed.
+*Control with minimal DevOps* — see [deploy/](./deploy/) for setup guides.
+
+---
+
+**3. Fully self-host**
+Run everything including your own GPU transcription service.
+*Meeting data never leaves your infrastructure* — see [deploy/](./deploy/) for setup guides.
+
+## What's new
+
+**v0.10.4**
+
+- **Zoom (via web)** — `platform=zoom` works out of the box, no SDK setup.
+
+**v0.10 — full architecture refactor**
+
+- **Services refactored** — runtime-api as infrastructure layer (container orchestration), meeting-api as data layer, agent-api as high-level intelligence layer. Clean separation of concerns.
+- **Real-time pipeline moved into bots** — transcription pipeline now runs inside bot containers, eliminating external dependencies
+- **Agent API** *(experimental)* — ephemeral containers for AI agents. See [services/agent-api/](./services/agent-api/).
+- **Helm/K8s** — production Kubernetes deployment with built images and global.imageTag support
+
+**v0.9**
+
+- **Zoom** *(experimental)* — initial Zoom Meeting SDK support
+- **Interactive Bots API** — speak, chat, screen share, avatar controls during live meetings
+- **MCP server** — 17 tools for AI agents
+- **Recordings** — S3-compatible storage
+
+---
+
+> See full release notes: [https://github.com/Vexa-ai/vexa/releases](https://github.com/Vexa-ai/vexa/releases)
 
 ---
 
 ## Quickstart
 
-### Option 1: Hosted (Fastest)
+### Self-host with Docker
 
-Just grab your API key at [https://vexa.ai/dashboard/api-keys](https://vexa.ai/dashboard/api-keys) and start using the service immediately.
+On a fresh Linux machine (Ubuntu 24.04):
 
-### Option 2: Vexa Lite - For Users (Recommended for Production)
-
-**Self-hosted, multiuser service for teams. Run as a single Docker container for easy deployment.**
-
-Vexa Lite is a single-container deployment perfect for teams who want:
-- **Self-hosted multiuser service** - Multiple users, API tokens, and team management
-- **Quick deployment** on any platform - Single container, easy to deploy
-- **No GPU required** - Transcription runs externally
-- **Choose your frontend** - Pick from open-source user interfaces like [Vexa Dashboard](https://github.com/Vexa-ai/Vexa-Dashboard)
-- **Production-ready** - Stateless, scalable, serverless-friendly
-
-**Quick start:**
 ```bash
-docker run -d \
-  --name vexa \
-  -p 8056:8056 \
-  -e DATABASE_URL="postgresql://user:pass@host/vexa" \
-  -e ADMIN_API_TOKEN="your-admin-token" \
-  -e TRANSCRIBER_URL="https://transcription.service" \
-  -e TRANSCRIBER_API_KEY="transcriber-token" \
-  vexaai/vexa-lite:latest
+apt-get update && apt-get install -y make git curl
+curl -fsSL https://get.docker.com | sh
+git clone https://github.com/Vexa-ai/vexa.git && cd vexa
 ```
 
-**Deployment options:**
-- 🚀 **One-click platform deployments**: [vexa-lite-deploy repository](https://github.com/Vexa-ai/vexa-lite-deploy)
-  - ✅ **Fly.io** - Implemented
-  - 🚧 **Railway, Render, etc.** - To be added (contribute by adding your platform of choice!)
-- 📖 **Complete setup guide**: [Vexa Lite Deployment Guide](https://docs.vexa.ai/vexa-lite-deployment) - Environment variables, storage, TTS, and all configuration options
-- 🎨 **Frontend options**: Choose from open-source user interfaces like [Vexa Dashboard](https://github.com/Vexa-ai/Vexa-Dashboard)
+Then choose:
 
-### Option 3: Docker Compose - For Development
 
-**Full stack deployment with all services. Perfect for development and testing.**
+| Command      | What you get                     | Best for                    |
+| ------------ | -------------------------------- | --------------------------- |
+| `make lite`  | Single container, all services   | Quick evaluation, small teams |
+| `make all`   | Full stack, each service separate | Development, production     |
 
-All services are saved in `docker-compose.yml` and wrapped in a Makefile for convenience:
 
-```bash
-git clone https://github.com/Vexa-ai/vexa.git
-cd vexa
-make all                         # Default: remote transcription (GPU-free)
-```
+Both prompt for a transcription token on first run. Get one at [vexa.ai/account](https://vexa.ai/account), or [self-host transcription](./services/transcription-service/README.md) with a GPU.
 
-**What `make all` does:**
-- Builds all Docker images
-- Spins up all containers (API, bots, transcription services, database)
-- Runs database migrations
-- Starts a simple test to verify everything works
+Guides: [Vexa Lite](deploy/lite/README.md) | [Docker Compose](deploy/compose/README.md) | [Helm (K8s)](deploy/helm/README.md)
 
-* Full guide: [Deployment Guide](https://docs.vexa.ai/deployment)
+### Hosted (no deployment needed)
 
-### Recording storage (local and cloud)
+Get your API key at [vexa.ai/account](https://vexa.ai/account) and start sending bots immediately.
 
-Recording is implemented and supports local filesystem, MinIO, and cloud S3-compatible backends.
+## Meeting API — Send Bots, Get Transcripts
 
-See [Recording Storage](https://docs.vexa.ai/recording-storage) for:
-
-- Storage backends and environment variables (`STORAGE_BACKEND`)
-- Docker Compose / Lite / Kubernetes deployment notes
-- Browser playback details (`/recordings/{recording_id}/media/{media_file_id}/raw`, `Range`/`206`, `Content-Disposition: inline`)
-
-### Option 4: Hashicorp Nomad, Kubernetes, OpenShift
-
-For enterprise orchestration platforms, contact [vexa.ai](https://vexa.ai)
-
-## 1. Send bot to meeting:
-
-Set `API_BASE` to your deployment:
-
-- Hosted: `https://api.cloud.vexa.ai`
-- Self-hosted Lite: `http://localhost:8056`
-- Self-hosted full stack (default): `http://localhost:8056`
+Send a bot, get real-time transcripts with per-speaker audio and interactive controls (speak, chat, share screen).
 
 ```bash
-export API_BASE="http://localhost:8056"
-```
-
-### Request a bot for Microsoft Teams
-
-```bash
+# Send a bot to Google Meet
 curl -X POST "$API_BASE/bots" \
   -H "Content-Type: application/json" \
   -H "X-API-Key: <API_KEY>" \
-  -d '{
-    "platform": "teams",
-    "native_meeting_id": "<NUMERIC_MEETING_ID>",
-    "passcode": "<MEETING_PASSCODE>"
-  }'
-```
+  -d '{"platform": "google_meet", "native_meeting_id": "abc-defg-hij"}'
 
-### Or request a bot for Google Meet
-
-```bash
-curl -X POST "$API_BASE/bots" \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: <API_KEY>" \
-  -d '{
-    "platform": "google_meet",
-    "native_meeting_id": "abc-defg-hij"
-  }'
-```
-
-### Or request a bot for Zoom
-
-```bash
-# Caveat: Zoom Meeting SDK apps typically require Marketplace approval to join other users' meetings.
-# Before approval, expect you can reliably join only meetings created by you (the authorizing account).
-#
-# From URL: https://us05web.zoom.us/j/YOUR_MEETING_ID?pwd=YOUR_PWD
-# Extract meeting ID and optional passcode separately.
-curl -X POST "$API_BASE/bots" \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: <API_KEY>" \
-  -d '{
-    "platform": "zoom",
-    "native_meeting_id": "YOUR_MEETING_ID",
-    "passcode": "YOUR_PWD",
-    "recording_enabled": true,
-    "transcribe_enabled": true,
-    "transcription_tier": "realtime"
-  }'
-```
-
-## 2. Get transcripts:
-
-### Get transcripts over REST
-
-```bash
+# Get transcripts
 curl -H "X-API-Key: <API_KEY>" \
-  "$API_BASE/transcripts/<platform>/<native_meeting_id>"
+  "$API_BASE/transcripts/google_meet/abc-defg-hij"
 ```
 
-For real-time streaming (sub‑second), see the [WebSocket guide](https://docs.vexa.ai/websocket).
-For full REST details, see the [User API Guide](https://docs.vexa.ai/user_api_guide).
+Works with Google Meet, Microsoft Teams, and Zoom. Set `API_BASE` to `https://api.cloud.vexa.ai` (hosted) or `http://localhost:8056` (self-hosted).
 
-Note: Meeting IDs are user-provided (Google Meet code like `xxx-xxxx-xxx` or Teams numeric ID and passcode). Vexa does not generate meeting IDs.
+For real-time WebSocket streaming, see the [WebSocket guide](https://docs.vexa.ai/websocket). For full REST details, see the [User API Guide](https://docs.vexa.ai/user_api_guide).
 
 ---
 
-## Who Vexa is for
+## Browser Bots — Persistent Browser Containers for Agents
 
-* **Enterprises (self-host):** Data sovereignty and control on your infra
-* **Teams using hosted API:** Fastest path from meeting to transcript
-* **n8n/indie builders:** Low-code automations powered by real-time transcripts
-  - Tutorial: https://vexa.ai/blog/google-meet-transcription-n8n-workflow
+Remote browser containers with CDP + Playwright access and persistent session storage via S3. Agents get a real browser that stays logged in across restarts — Google, Microsoft, or any web session.
+
+- **CDP + Playwright** — full browser automation via Chrome DevTools Protocol
+- **Persistent sessions** — authenticated browser state saved to S3, restored on next spin-up
+- **VNC access** — humans can observe and control the browser in real time alongside agents
+- **On-demand containers** — spin up in seconds, auto-reclaim when idle
+
+See [features/browser-session/](./features/browser-session/) and [features/remote-browser/](./features/remote-browser/) for details.
+
+---
+
+## MCP Server — Meeting Tools for AI Agents
+
+17 tools that let AI agents join meetings, read transcripts, speak, chat, and share screen. Works with Claude, Cursor, Windsurf, and any MCP-compatible client.
+
+Your AI agent can join a meeting, listen to the conversation, and participate — all through MCP tool calls. See [services/mcp/](./services/mcp/) for setup and tool reference.
+
+---
+
+## Modular — Pick What You Need
+
+Vexa is a toolkit, not a monolith. Every feature works independently. Use one or all — they compose when you need them to.
+
+
+| You're building... | Features you need | Skip the rest |
+| --- | --- | --- |
+| **Self-hosted Otter replacement** | transcription + multi-platform + webhooks | agent runtime, scheduler, MCP |
+| **Meeting data pipeline** | transcription + webhooks + post-meeting | speaking-bot, chat, agent runtime |
+| **AI meeting assistant product** | transcription + MCP + speaking-bot + chat | remote-browser, scheduler |
+| **Meeting bot API (like Recall.ai)** | multi-platform + transcription + token-scoping | agent runtime, workspaces |
+
+
+You don't pay complexity tax for features you don't use. Each service is a separate container. Don't need agents? Don't run agent-api. Don't need TTS? Don't run tts-service. Services communicate via REST and Redis, not tight coupling.
 
 ---
 
@@ -274,97 +228,30 @@ Note: Meeting IDs are user-provided (Google Meet code like `xxx-xxxx-xxx` or Tea
 
 For the up-to-date roadmap and priorities, see GitHub Issues and Milestones. Issues are grouped by milestones to show what's coming next, in what order, and what's currently highest priority.
 
-- Issues: https://github.com/Vexa-ai/vexa/issues
-- Milestones: https://github.com/Vexa-ai/vexa/milestones
+- Issues: [https://github.com/Vexa-ai/vexa/issues](https://github.com/Vexa-ai/vexa/issues)
+- Milestones: [https://github.com/Vexa-ai/vexa/milestones](https://github.com/Vexa-ai/vexa/milestones)
 
 > For discussion/support, join our [Discord](https://discord.gg/Ga9duGkVz9).
 
-## Architecture
+## Architecture & Feature Status
 
-- [api-gateway](./services/api-gateway): Routes API requests to appropriate services
-- [mcp](./services/mcp): Provides MCP-capable agents with Vexa as a toolkit
-- [bot-manager](./services/bot-manager): Handles bot lifecycle management
-- [vexa-bot](./services/vexa-bot): The bot that joins meetings and captures audio
-- [WhisperLive](./services/WhisperLive): Real-time audio transcription service (uses transcription-service as backend in remote mode)
-- [transcription-service](./services/transcription-service): Basic transcription service (WhisperLive uses it as a real-time wrapper)
-- [transcription-collector](./services/transcription-collector): Processes and stores transcription segments
-- [Database models](./libs/shared-models/shared_models/models.py): Data structures for storing meeting information
+Each service and feature has its own README with architecture, DoD table, and evidence-based confidence scores.
 
-> 💫 If you're building with Vexa, we'd love your support! [Star our repo](https://github.com/Vexa-ai/vexa/stargazers) to help us reach 2000 stars.
+- **Services:** [api-gateway](./services/api-gateway) • [meeting-api](./services/meeting-api) • [admin-api](./services/admin-api) • [runtime-api](./services/runtime-api) • [vexa-bot](./services/vexa-bot) • [transcription-service](./services/transcription-service) • [tts-service](./services/tts-service) • [mcp](./services/mcp) • [dashboard](./services/dashboard) • [agent-api](./services/agent-api) *(experimental)*
+- **Features:** [realtime-transcription](./features/realtime-transcription) • [bot-lifecycle](./features/bot-lifecycle) • [browser-session](./features/browser-session) • [remote-browser](./features/remote-browser) • [speaking-bot](./features/speaking-bot) • [meeting-chat](./features/meeting-chat) • [webhooks](./features/webhooks) • [authenticated-meetings](./features/authenticated-meetings)
+- **Deploy:** [Docker Compose](./deploy/compose) • [Vexa Lite](./deploy/lite) • [Helm/K8s](./deploy/helm)
+- **Guides:** [Vexa Lite Deployment](https://docs.vexa.ai/vexa-lite-deployment) • [Docker Compose Deployment](https://docs.vexa.ai/deployment) • [Self-Hosted Management](https://docs.vexa.ai/self-hosted-management) • [Recording Storage](https://docs.vexa.ai/recording-storage)
 
-### Features:
-
-- **Real-time multilingual transcription** supporting **100 languages** with **Whisper**
-- **Real-time translation** across all 100 supported languages
-- **Google Meet integration** - Automatically join and transcribe Google Meet calls
-- **Microsoft Teams integration** - Automatically join and transcribe Teams meetings
-- **Zoom integration** - Automatically join and transcribe Zoom meetings
-- **REST API** - Complete API for managing bots, users, and transcripts
-- **Interactive meeting controls** - Bot speak/chat/screen/avatar endpoints for active meetings
-- **WebSocket streaming** - Sub-second transcript delivery via WebSocket
-- **MCP server** - Expose Vexa APIs as agent tools for MCP-compatible clients
-- **Multiuser support** - User management, API tokens, and team features
-- **Self-hostable** - Full control over your data and infrastructure
-- **Open-source frontends** - Choose from user interfaces like [Vexa Dashboard](https://github.com/Vexa-ai/Vexa-Dashboard)
-
-**Deployment & Management Guides:**
-- [Vexa Lite Deployment Guide](https://docs.vexa.ai/vexa-lite-deployment) - Single container deployment
-- [Docker Compose Deployment](https://docs.vexa.ai/deployment) - Full stack for development
-- [Self-Hosted Management Guide](https://docs.vexa.ai/self-hosted-management) - Managing users and API tokens
-- [Recording Storage](https://docs.vexa.ai/recording-storage) - S3, MinIO, and local storage configuration
-
-## Related Projects
-
-Vexa is part of an ecosystem of open-source tools:
-
-
-### 🎨 [Vexa Dashboard](https://github.com/Vexa-ai/Vexa-Dashboard)
-100% open-source web interface for Vexa. Join meetings, view transcripts, manage users, and more. Self-host everything with no cloud dependencies.
+---
 
 ## Contributing
 
-We use **GitHub Issues** as our main feedback channel. New issues are triaged within **72 hours** (you'll get a label + short response). Not every feature will be implemented, but every issue will be acknowledged. Look for **`good-first-issue`** if you want to contribute.
+We use **GitHub Issues** as our main feedback channel — triaged within **72 hours**. Look for `good-first-issue` to get started. Join [Discord](https://discord.gg/Ga9duGkVz9) to discuss ideas and get assigned.
 
-Contributors are welcome! Join our community and help shape Vexa's future. Here's how to get involved:
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square)](LICENSE)
 
-1. **Understand Our Direction**:
-2. **Engage on Discord** ([Discord Community](https://discord.gg/Ga9duGkVz9)):
+## Links
 
-   * **Introduce Yourself**: Start by saying hello in the introductions channel.
-   * **Stay Informed**: Check the Discord channel for known issues, feature requests, and ongoing discussions. Issues actively being discussed often have dedicated channels.
-   * **Discuss Ideas**: Share your feature requests, report bugs, and participate in conversations about a specific issue you're interested in delivering.
-   * **Get Assigned**: If you feel ready to contribute, discuss the issue you'd like to work on and ask to get assigned on Discord.
-3. **Development Process**:
+[Website](https://vexa.ai) • [Docs](https://docs.vexa.ai) • [Discord](https://discord.gg/Ga9duGkVz9) • [LinkedIn](https://www.linkedin.com/company/vexa-ai/) • [X (@grankin_d)](https://x.com/grankin_d) • [Meet Founder](https://www.linkedin.com/in/dmitry-grankin/)
 
-   * Browse available **tasks** (often linked from Discord discussions or the roadmap).
-   * Request task assignment through Discord if not already assigned.
-   * Submit **pull requests** for review.
-
-- **Critical Tasks & Bounties**:
-  - Selected **high-priority tasks** may be marked with **bounties**.
-  - Bounties are sponsored by the **Vexa core team**.
-  - Check task descriptions (often on the roadmap or Discord) for bounty details and requirements.
-
-We look forward to your contributions!
-
-Licensed under **Apache-2.0** — see [LICENSE](LICENSE).
-
-## Project Links
-
-- 🌐 [Vexa Website](https://vexa.ai)
-- 💼 [LinkedIn](https://www.linkedin.com/company/vexa-ai/)
-- 🐦 [X (@grankin_d)](https://x.com/grankin_d)
-- 💬 [Discord Community](https://discord.gg/Ga9duGkVz9)
-
-## Repository Structure
-
-This is the main Vexa repository containing the core API and services. For related projects:
-
-- **[vexa-lite-deploy](https://github.com/Vexa-ai/vexa-lite-deploy)** - Deployment configurations for Vexa Lite
-- **[Vexa-Dashboard](https://github.com/Vexa-ai/Vexa-Dashboard)** - Web UI for managing Vexa instances (first in a planned series of UI applications)
-
-[![Meet Founder](https://img.shields.io/badge/LinkedIn-Dmitry_Grankin-0A66C2?style=flat-square&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/dmitry-grankin/)
-
-[![Join Discord](https://img.shields.io/badge/Discord-Community-5865F2?style=flat-square&logo=discord&logoColor=white)](https://discord.gg/Ga9duGkVz9)
-
-The Vexa name and logo are trademarks of **Vexa.ai Inc**.
+**Related:** [vexa-lite-deploy](https://github.com/Vexa-ai/vexa-lite-deploy) • [Vexa Dashboard](./services/dashboard)
