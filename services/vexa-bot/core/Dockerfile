@@ -62,16 +62,25 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update && DEBIAN_FRONTEND=noninteract
     novnc \
     autocutsel \
     openssh-server \
+    unzip \
+    && apt-get remove -y awscli 2>/dev/null || true \
     && rm -rf /var/lib/apt/lists/*
 
-# Install AWS CLI for S3/MinIO sync (used by authenticated bot mode)
-RUN curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip \
+# Install AWS CLI v2 (arch-aware) + GCS SigV2 config
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then \
+        AWS_URL="https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip"; \
+    else \
+        AWS_URL="https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"; \
+    fi && \
+    curl -fsSL "$AWS_URL" -o /tmp/awscliv2.zip \
     && unzip /tmp/awscliv2.zip -d /tmp \
     && /tmp/aws/install --update \
     && rm -rf /tmp/awscliv2.zip /tmp/aws \
-    && apt-get remove -y awscli 2>/dev/null || true
-
-RUN mkdir -p /root/.aws && printf '[default]\ns3 =\n    signature_version = s3\n' > /root/.aws/config
+    && ln -sf /usr/local/bin/aws /usr/bin/aws \
+    && aws --version 2>&1 | grep -q "aws-cli/2" || (echo "ERROR: AWS CLI v2 install failed" && exit 1) \
+    && mkdir -p /root/.aws \
+    && printf '[default]\ns3 =\n    signature_version = s3\n' > /root/.aws/config
 
 # Copy the built application and node_modules from the base stage
 COPY --from=base /app /app
