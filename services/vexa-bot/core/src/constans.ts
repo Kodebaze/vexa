@@ -93,6 +93,8 @@ export function getBrowserSessionArgs(): string[] {
     '--no-sandbox',
     '--disable-setuid-sandbox',
     '--disable-blink-features=AutomationControlled',
+    '--disable-gpu',
+    '--in-process-gpu',
     '--use-fake-ui-for-media-stream',
     '--start-maximized',
     '--window-size=1920,1080',
@@ -100,6 +102,7 @@ export function getBrowserSessionArgs(): string[] {
     '--remote-debugging-port=9222',
     '--remote-debugging-address=0.0.0.0',
     '--remote-allow-origins=*',
+    '--disable-features=VizDisplayCompositor',
     '--password-store=basic',
   ];
 }

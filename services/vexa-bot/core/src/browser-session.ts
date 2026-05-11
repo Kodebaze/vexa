@@ -123,6 +123,9 @@ export async function runBrowserSession(config: BrowserSessionConfig): Promise<v
   mkdirSync(BROWSER_DATA_DIR, { recursive: true });
   mkdirSync(WORKSPACE_DIR, { recursive: true });
 
+  // Clean stale locks
+  cleanStaleLocks();
+
   // Download existing data
   syncBrowserDataFromS3(config);
   syncWorkspaceDown(config);

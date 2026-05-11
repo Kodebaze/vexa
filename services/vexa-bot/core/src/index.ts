@@ -812,7 +812,9 @@ async function performGracefulLeave(
   if (currentBotConfig?.authenticated && currentBotConfig?.userdataS3Path) {
     try {
       log("[Graceful Leave] Syncing browser data to S3 (authenticated bot)...");
+      cleanStaleLocks(BROWSER_DATA_DIR)
       syncBrowserDataToS3(currentBotConfig);
+      cleanStaleLocks(BROWSER_DATA_DIR)
       log("[Graceful Leave] Browser data synced to S3.");
     } catch (syncErr: any) {
       log(`[Graceful Leave] Browser data S3 sync failed: ${syncErr.message}`);
@@ -2287,6 +2289,7 @@ export async function runBot(botConfig: BotConfig): Promise<void> {// Store botC
   if (botConfig.authenticated && botConfig.userdataS3Path) {
     log('[Bot] Authenticated mode: downloading userdata from S3...');
     ensureBrowserDataDir();
+    cleanStaleLocks(BROWSER_DATA_DIR);
     syncBrowserDataFromS3(botConfig);
     cleanStaleLocks(BROWSER_DATA_DIR);
 

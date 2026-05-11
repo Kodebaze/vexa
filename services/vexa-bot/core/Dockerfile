@@ -60,13 +60,18 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update && DEBIAN_FRONTEND=noninteract
     curl \
     python3-websockify \
     novnc \
+    autocutsel \
+    openssh-server \
     && rm -rf /var/lib/apt/lists/*
 
 # Install AWS CLI for S3/MinIO sync (used by authenticated bot mode)
 RUN curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip \
-    && unzip -q /tmp/awscliv2.zip -d /tmp \
-    && /tmp/aws/install \
-    && rm -rf /tmp/awscliv2.zip /tmp/aws
+    && unzip /tmp/awscliv2.zip -d /tmp \
+    && /tmp/aws/install --update \
+    && rm -rf /tmp/awscliv2.zip /tmp/aws \
+    && apt-get remove -y awscli 2>/dev/null || true
+
+RUN mkdir -p /root/.aws && printf '[default]\ns3 =\n    signature_version = s3\n' > /root/.aws/config
 
 # Copy the built application and node_modules from the base stage
 COPY --from=base /app /app

@@ -5,7 +5,7 @@ import { join } from 'path';
 export const BROWSER_DATA_DIR = '/tmp/browser-data';
 
 export const BROWSER_CACHE_EXCLUDES = [
-  '*/Cache/*', '*/Code Cache/*', '*/GrShaderCache/*', '*/ShaderCache/*', '*/GraphiteDawnCache/*',
+  '*/Cache/*', '*/Code Cache/*', '*/Cache_Data/*', '*/GrShaderCache/*', '*/ShaderCache/*', '*/GraphiteDawnCache/*',
   '*/Service Worker/*', '*BrowserMetrics*',
   'SingletonLock', 'SingletonCookie', 'SingletonSocket',
   '*/GPUCache/*', '*/DawnGraphiteCache/*', '*/DawnWebGPUCache/*',
@@ -36,7 +36,7 @@ export function s3Sync(localDir: string, s3Path: string, config: S3Config, direc
   const [src, dst] = direction === 'down' ? [s3Uri, `${localDir}/`] : [`${localDir}/`, s3Uri];
   console.log(`[s3-sync] S3 sync ${direction}: ${src} → ${dst}`);
   execSync(
-    `aws s3 sync "${src}" "${dst}" --endpoint-url "${config.s3Endpoint}" ${deleteArg} ${excludeArgs}`,
+    `aws s3 sync "${src}" "${dst}" --endpoint-url "${config.s3Endpoint}" --no-follow-symlinks ${deleteArg} ${excludeArgs}`,
     { env: getS3Env(config), stdio: 'inherit', timeout: 300000 }
   );
 }
